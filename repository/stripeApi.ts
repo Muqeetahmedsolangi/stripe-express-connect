@@ -103,7 +103,7 @@ export const stripeApi = {
 // Helper functions for demo purposes
 const isStripeOnboardingComplete = async (): Promise<boolean> => {
   try {
-    const { AsyncStorage } = await import('@react-native-async-storage/async-storage');
+    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
     const isComplete = await AsyncStorage.getItem('stripe_onboarding_complete');
     return isComplete === 'true';
   } catch {
@@ -113,7 +113,7 @@ const isStripeOnboardingComplete = async (): Promise<boolean> => {
 
 const markStripeOnboardingComplete = async (accountId: string): Promise<void> => {
   try {
-    const { AsyncStorage } = await import('@react-native-async-storage/async-storage');
+    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
     await AsyncStorage.setItem('stripe_onboarding_complete', 'true');
     await AsyncStorage.setItem('stripe_account_id', accountId);
   } catch (error) {

@@ -10,23 +10,21 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useSelector } from 'react-redux';
-import Toast from 'react-native-toast-message';
-import * as WebBrowser from 'expo-web-browser';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store';
 import { Product } from '../../store/slices/productsSlice';
-import paymentService from '../../services/paymentService';
+import { addToCart } from '../../store/slices/cartSlice';
 
 export default function ProductDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const dispatch = useDispatch();
   const { products } = useSelector((state: RootState) => state.products);
   
   const [product, setProduct] = useState<Product | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    const foundProduct = products.find(p => p.id === id);
+    const foundProduct = products.find(p => p.id === parseInt(id));
     if (foundProduct) {
       setProduct(foundProduct);
     } else {
@@ -36,79 +34,23 @@ export default function ProductDetailsScreen() {
     }
   }, [id, products]);
 
-  const handleDirectPurchase = async () => {
+  const handleAddToCart = () => {
     if (!product) return;
 
     if (!product.inStock) {
-      Toast.show({
-        type: 'error',
-        text1: 'Out of Stock ❌',
-        text2: 'This product is currently unavailable',
-        position: 'top',
-      });
+      Alert.alert('Out of Stock', 'This product is currently unavailable.');
       return;
     }
 
-    try {
-      setIsProcessing(true);
-
-      Toast.show({
-        type: 'info',
-        text1: 'Processing Payment 💳',
-        text2: 'Creating Stripe payment intent...',
-        position: 'top',
-      });
-
-      // Create payment intent
-      const response = await paymentService.createPaymentIntent({
-        productId: product.id,
-        quantity,
-      });
-
-      const { paymentIntent, order } = response.data;
-
-      // Create Stripe payment URL (for demo purposes)
-      const stripeUrl = `https://checkout.stripe.com/pay/${paymentIntent.clientSecret}`;
-
-      // Open Stripe payment in browser
-      const result = await WebBrowser.openBrowserAsync(stripeUrl, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
-        controlsColor: '#007AFF',
-      });
-
-      if (result.type === 'dismiss') {
-        Toast.show({
-          type: 'info',
-          text1: 'Payment Cancelled 🚫',
-          text2: 'You can try again anytime',
-          position: 'top',
-        });
-      } else {
-        // Simulate successful payment
-        Toast.show({
-          type: 'success',
-          text1: 'Payment Successful! 🎉',
-          text2: `Purchased ${quantity} ${product.name}${quantity > 1 ? 's' : ''}`,
-          position: 'top',
-        });
-
-        // Navigate back after successful purchase
-        setTimeout(() => {
-          router.back();
-        }, 2000);
-      }
-
-    } catch (error: any) {
-      console.error('Payment error:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Payment Failed ❌',
-        text2: error.message || 'Something went wrong',
-        position: 'top',
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+    dispatch(addToCart({ product, quantity }));
+    Alert.alert(
+      'Added to Cart!', 
+      `${quantity} ${product.title || product.name}${quantity > 1 ? 's' : ''} added to your cart.`,
+      [
+        { text: 'Continue Shopping', style: 'cancel' },
+        { text: 'View Cart', onPress: () => router.push('/cart') }
+      ]
+    );
   };
 
   const incrementQuantity = () => {
@@ -144,33 +86,45 @@ export default function ProductDetailsScreen() {
 
         {/* Product Image */}
         <View style={styles.imageContainer}>
-          <Text style={styles.productEmoji}>{product.image || '📦'}</Text>
+          <Text style={styles.productEmoji}>📦</Text>
         </View>
 
         {/* Product Info */}
         <View style={styles.productInfo}>
           <View style={styles.productHeader}>
             <View style={styles.productTitleSection}>
-              <Text style={styles.productName}>{product.name}</Text>
-              <View style={styles.ratingSection}>
-                <Text style={styles.rating}>⭐ {product.rating}</Text>
-                <Text style={styles.reviews}>({product.reviews} reviews)</Text>
-              </View>
+              <Text style={styles.productName}>{product.title || product.name}</Text>
+              {(product.rating || product.reviews) && (
+                <View style={styles.ratingSection}>
+                  <Text style={styles.rating}>⭐ {product.rating || 4.5}</Text>
+                  <Text style={styles.reviews}>({product.reviews || 0} reviews)</Text>
+                </View>
+              )}
             </View>
-            {!product.inStock && (
+            {product.inStock === false && (
               <View style={styles.outOfStockBadge}>
                 <Text style={styles.outOfStockText}>Out of Stock</Text>
               </View>
             )}
           </View>
           <Text style={styles.productPrice}>
-            ${product.price.toFixed(2)} {product.currency}
+            ${typeof product.price === 'string' ? parseFloat(product.price).toFixed(2) : product.price.toFixed(2)} {product.currency || 'USD'}
           </Text>
-          <View style={styles.categoryContainer}>
-            <Text style={styles.categoryLabel}>Category:</Text>
-            <Text style={styles.categoryValue}>{product.category}</Text>
-          </View>
+          {product.category && (
+            <View style={styles.categoryContainer}>
+              <Text style={styles.categoryLabel}>Category:</Text>
+              <Text style={styles.categoryValue}>{product.category}</Text>
+            </View>
+          )}
           <Text style={styles.productDescription}>{product.description}</Text>
+          {product.seller && (
+            <View style={styles.sellerContainer}>
+              <Text style={styles.sellerLabel}>Sold by:</Text>
+              <Text style={styles.sellerName}>
+                {product.seller.firstName} {product.seller.lastName}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Product Details */}
@@ -182,7 +136,7 @@ export default function ProductDetailsScreen() {
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Currency:</Text>
-            <Text style={styles.detailValue}>{product.currency}</Text>
+            <Text style={styles.detailValue}>{product.currency || 'USD'}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Created:</Text>
@@ -190,6 +144,12 @@ export default function ProductDetailsScreen() {
               {new Date(product.createdAt).toLocaleDateString()}
             </Text>
           </View>
+          {product.sellerId && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Seller ID:</Text>
+              <Text style={styles.detailValue}>{product.sellerId}</Text>
+            </View>
+          )}
         </View>
 
         {/* Quantity Selector */}
@@ -213,36 +173,38 @@ export default function ProductDetailsScreen() {
             </TouchableOpacity>
           </View>
           <Text style={styles.totalPrice}>
-            Total: ${(product.price * quantity).toFixed(2)}
+            Total: ${(parseFloat(product.price.toString()) * quantity).toFixed(2)}
           </Text>
         </View>
 
-        {/* Purchase Button */}
+        {/* Add to Cart Button */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={[
-              styles.purchaseButton,
-              (!product.inStock || isProcessing) && styles.disabledButton
+              styles.addToCartButton,
+              product.inStock === false && styles.disabledButton
             ]} 
-            onPress={handleDirectPurchase}
-            disabled={!product.inStock || isProcessing}
+            onPress={handleAddToCart}
+            disabled={product.inStock === false}
           >
-            {isProcessing ? (
-              <View style={styles.processingContainer}>
-                <ActivityIndicator size="small" color="white" />
-                <Text style={styles.purchaseButtonText}>Processing...</Text>
-              </View>
-            ) : (
-              <Text style={[
-                styles.purchaseButtonText,
-                !product.inStock && styles.disabledButtonText
-              ]}>
-                {!product.inStock 
-                  ? '❌ Out of Stock' 
-                  : `💳 Buy Now - $${(product.price * quantity).toFixed(2)}`
-                }
-              </Text>
-            )}
+            <Text style={[
+              styles.addToCartButtonText,
+              product.inStock === false && styles.disabledButtonText
+            ]}>
+              {product.inStock === false 
+                ? '❌ Out of Stock' 
+                : `🛒 Add ${quantity} to Cart - $${(parseFloat(product.price.toString()) * quantity).toFixed(2)}`
+              }
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.optionalCheckoutButton}
+            onPress={() => Alert.alert('Checkout (Optional)', 'Stripe integration is optional - items are saved in cart for demonstration.')}
+          >
+            <Text style={styles.optionalCheckoutText}>
+              💳 Optional Stripe Checkout
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -457,8 +419,23 @@ const styles = StyleSheet.create({
   buttonContainer: {
     padding: 20,
   },
-  purchaseButton: {
-    backgroundColor: '#34C759',
+  sellerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  sellerLabel: {
+    fontSize: 16,
+    color: '#666',
+    marginRight: 8,
+  },
+  sellerName: {
+    fontSize: 16,
+    color: '#4F46E5',
+    fontWeight: '600',
+  },
+  addToCartButton: {
+    backgroundColor: '#4F46E5',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
@@ -467,16 +444,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    marginBottom: 12,
   },
-  processingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  purchaseButtonText: {
+  addToCartButtonText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginLeft: 8,
+  },
+  optionalCheckoutButton: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  optionalCheckoutText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '600',
   },
   footer: {
     height: 20,

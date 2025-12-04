@@ -130,6 +130,33 @@ class AuthService {
       return null;
     }
   }
+
+  async initializeAuth(): Promise<boolean> {
+    try {
+      const token = await this.getStoredToken();
+      
+      if (!token) {
+        return false;
+      }
+
+      // Verify token with backend
+      const user = await this.getCurrentUser();
+      
+      if (user) {
+        return true;
+      } else {
+        // Token is invalid, remove it
+        await AsyncStorage.removeItem('authToken');
+        await AsyncStorage.removeItem('user');
+        return false;
+      }
+    } catch (error) {
+      console.error('Auth initialization error:', error);
+      await AsyncStorage.removeItem('authToken');
+      await AsyncStorage.removeItem('user');
+      return false;
+    }
+  }
 }
 
 export default new AuthService();

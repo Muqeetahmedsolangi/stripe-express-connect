@@ -9,13 +9,18 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.replace('/login');
-    }
-  }, [isAuthenticated, isLoading]);
+    // Add a small delay to allow for Redux state updates after registration
+    const timeoutId = setTimeout(() => {
+      if (!isLoading && !isAuthenticated && !user) {
+        router.replace('/login');
+      }
+    }, 200);
+
+    return () => clearTimeout(timeoutId);
+  }, [isAuthenticated, isLoading, user]);
 
   if (isLoading) {
     return (
@@ -26,7 +31,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !user) {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Redirecting to login...</Text>

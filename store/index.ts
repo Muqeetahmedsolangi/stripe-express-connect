@@ -5,17 +5,19 @@ import { combineReducers } from 'redux';
 import authReducer from './slices/authSlice';
 import stripeReducer from './slices/stripeSlice';
 import productsReducer from './slices/productsSlice';
+import cartReducer from './slices/cartSlice';
 
 const persistConfig = {
   key: 'root',
   storage: AsyncStorage,
-  whitelist: ['auth', 'stripe'],
+  whitelist: ['auth', 'stripe', 'cart'],
 };
 
 const rootReducer = combineReducers({
   auth: authReducer,
   stripe: stripeReducer,
   products: productsReducer,
+  cart: cartReducer,
 });
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

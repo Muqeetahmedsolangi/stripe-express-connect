@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Image } from 'expo-image';
-import { StyleSheet, View, FlatList, TextInput, TouchableOpacity, Text, ScrollView, SafeAreaView } from 'react-native';
-import { useSelector } from 'react-redux';
+import { StyleSheet, View, FlatList, TextInput, TouchableOpacity, Text, ScrollView, SafeAreaView, Alert } from 'react-native';
+import { useSelector, useDispatch } from 'react-redux';
 import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
@@ -10,15 +10,52 @@ import LogoutButton from '@/components/LogoutButton';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import ProductCard from '@/components/ProductCard';
 import { RootState } from '@/store';
+import { fetchProductsStart, fetchProductsSuccess, fetchProductsFailure } from '@/store/slices/productsSlice';
+import { addToCart } from '@/store/slices/cartSlice';
+import { productsApi } from '@/repository/productsApi';
 
 export default function HomeScreen() {
+  const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { products } = useSelector((state: RootState) => state.products);
+  const { products, isLoading } = useSelector((state: RootState) => state.products);
+  const { totalItems } = useSelector((state: RootState) => state.cart);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
+  // Fetch products on component mount
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    dispatch(fetchProductsStart());
+    try {
+      const response = await productsApi.getAllProducts();
+      if (response.status === 'success' && response.data) {
+        // Add mock categories and ratings for display
+        const productsWithExtras = response.data.products.map(product => ({
+          ...product,
+          category: 'General', // You can categorize based on product name or add categories to backend
+          rating: 4.5 + Math.random() * 0.5, // Mock rating
+          reviews: Math.floor(Math.random() * 200) + 10,
+          inStock: true,
+        }));
+        dispatch(fetchProductsSuccess(productsWithExtras));
+      } else {
+        dispatch(fetchProductsFailure(response.message || 'Failed to fetch products'));
+      }
+    } catch (error) {
+      dispatch(fetchProductsFailure('Failed to fetch products'));
+    }
+  };
+
+  const handleAddToCart = (product: any) => {
+    dispatch(addToCart({ product }));
+    Alert.alert('Added to Cart', `${product.title || product.name} has been added to your cart!`);
+  };
+
+  const categories = ['All', ...Array.from(new Set(products.map(p => p.category).filter((cat): cat is string => Boolean(cat))))];
 
   const filteredProducts = useMemo(() => {
     let filtered = products;
@@ -28,7 +65,7 @@ export default function HomeScreen() {
       filtered = filtered.filter(product => 
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.category.toLowerCase().includes(searchQuery.toLowerCase())
+        (product.category && product.category.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
 
@@ -40,7 +77,7 @@ export default function HomeScreen() {
     return filtered;
   }, [products, searchQuery, selectedCategory]);
 
-  const featuredProducts = products.filter(product => product.rating >= 4.5).slice(0, 3);
+  const featuredProducts = products.filter(product => (product.rating || 0) >= 4.5).slice(0, 3);
   const newArrivals = products.slice(-4);
 
   const renderHeroBanner = () => (
@@ -118,10 +155,19 @@ export default function HomeScreen() {
           data={featuredProducts}
           renderItem={({ item }) => (
             <View style={styles.featuredCard}>
-              <ProductCard product={item} />
+              <ProductCard 
+                product={item} 
+                onPress={() => router.push(`/product/${item.id}`)}
+              />
+              <TouchableOpacity 
+                style={styles.addToCartButton}
+                onPress={() => handleAddToCart(item)}
+              >
+                <Text style={styles.addToCartText}>Add to Cart</Text>
+              </TouchableOpacity>
             </View>
           )}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.featuredList}
@@ -145,10 +191,19 @@ export default function HomeScreen() {
           data={newArrivals}
           renderItem={({ item }) => (
             <View style={styles.productCard}>
-              <ProductCard product={item} />
+              <ProductCard 
+                product={item} 
+                onPress={() => router.push(`/product/${item.id}`)}
+              />
+              <TouchableOpacity 
+                style={styles.addToCartButton}
+                onPress={() => handleAddToCart(item)}
+              >
+                <Text style={styles.addToCartText}>Add to Cart</Text>
+              </TouchableOpacity>
             </View>
           )}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           scrollEnabled={false}
         />
       </View>
@@ -187,7 +242,7 @@ export default function HomeScreen() {
                 <ProductCard product={item} />
               </View>
             )}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.id.toString()}
             scrollEnabled={false}
           />
         </View>
@@ -207,7 +262,20 @@ export default function HomeScreen() {
               <Text style={styles.welcomeText}>Hello, {user?.email?.split('@')[0]}! 👋</Text>
               <Text style={styles.headerSubtitle}>What are you looking for today?</Text>
             </View>
-            <LogoutButton />
+            <View style={styles.headerActions}>
+              <TouchableOpacity 
+                style={styles.cartButton}
+                onPress={() => router.push('/cart')}
+              >
+                <Text style={styles.cartIcon}>🛒</Text>
+                {totalItems > 0 && (
+                  <View style={styles.cartBadge}>
+                    <Text style={styles.cartBadgeText}>{totalItems}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <LogoutButton />
+            </View>
           </View>
         </View>
 
@@ -413,5 +481,48 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cartButton: {
+    position: 'relative',
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  cartIcon: {
+    fontSize: 24,
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cartBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  addToCartButton: {
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  addToCartText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

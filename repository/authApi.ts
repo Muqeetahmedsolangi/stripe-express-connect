@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from './api';
 
 export interface RegisterRequest {
@@ -52,6 +53,11 @@ export const authApi = {
         headers: { 'X-Skip-Auth': 'true' }
       });
       
+      // Store token in AsyncStorage if registration was successful
+      if (response.data.token) {
+        await AsyncStorage.setItem('authToken', response.data.token);
+      }
+      
       return {
         status: 'success',
         message: response.data.message || 'Registration successful',
@@ -74,6 +80,9 @@ export const authApi = {
       });
       
       if (response.data.status === 'success') {
+        // Store token in AsyncStorage
+        await AsyncStorage.setItem('authToken', response.data.token);
+        
         return {
           success: true,
           status: 'success',
@@ -117,12 +126,16 @@ export const authApi = {
   logout: async (): Promise<{ success: boolean; message?: string }> => {
     try {
       const response = await api.post('/auth/logout');
+      // Remove token from AsyncStorage
+      await AsyncStorage.removeItem('authToken');
       return { 
         success: true, 
         message: response.data.message || 'Logged out successfully' 
       };
     } catch (error: any) {
       console.error('Logout error:', error);
+      // Remove token even if logout API fails
+      await AsyncStorage.removeItem('authToken');
       return { 
         success: false, 
         message: error.response?.data?.message || 'Logout failed' 

@@ -60,7 +60,7 @@ export default function LoginScreen() {
               style={styles.input}
               value={email}
               onChangeText={setEmail}
-              placeholder="admin@gmail.com"
+              placeholder="admin@vipme.com"
               placeholderTextColor="#999"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -74,7 +74,7 @@ export default function LoginScreen() {
               style={styles.input}
               value={password}
               onChangeText={setPassword}
-              placeholder="Admin@123"
+              placeholder="password123"
               placeholderTextColor="#999"
               secureTextEntry
             />
@@ -96,8 +96,16 @@ export default function LoginScreen() {
 
           <View style={styles.credentialsHint}>
             <Text style={styles.hintText}>Demo Credentials:</Text>
-            <Text style={styles.hintText}>Email: admin@gmail.com</Text>
-            <Text style={styles.hintText}>Password: Admin@123</Text>
+            <Text style={styles.hintText}>Admin: admin@vipme.com / password123</Text>
+            <Text style={styles.hintText}>Seller: seller1@vipme.com / password123</Text>
+            <Text style={styles.hintText}>User: user1@example.com / password123</Text>
+          </View>
+
+          <View style={styles.signupLinkContainer}>
+            <Text style={styles.signupLinkText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/signup')}>
+              <Text style={styles.signupLink}>Sign Up</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -192,5 +200,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#555',
     lineHeight: 20,
+  },
+  signupLinkContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  signupLinkText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  signupLink: {
+    fontSize: 16,
+    color: '#007AFF',
+    fontWeight: '600',
   },
 });

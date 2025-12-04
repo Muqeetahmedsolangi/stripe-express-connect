@@ -26,23 +26,38 @@ export default function ProductCard({
     }
   };
 
+  const getProductEmoji = () => {
+    // Extract emoji from first image or use default based on category
+    if (product.images && product.images.length > 0) {
+      return '📦'; // Default for now
+    }
+    return product.category === 'Food & Beverages' ? '☕' : '📦';
+  };
+
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress} activeOpacity={0.7}>
       <View style={styles.header}>
-        <Text style={styles.emoji}>{product.image || '📦'}</Text>
+        <Text style={styles.emoji}>{getProductEmoji()}</Text>
         <View style={styles.headerText}>
           <Text style={styles.name} numberOfLines={1}>
-            {product.name}
+            {product.title || product.name}
           </Text>
           <Text style={styles.price}>
-            ${product.price.toFixed(2)} {product.currency}
+            ${typeof product.price === 'string' ? parseFloat(product.price).toFixed(2) : product.price.toFixed(2)} {product.currency || 'USD'}
           </Text>
-          <View style={styles.ratingContainer}>
-            <Text style={styles.rating}>⭐ {product.rating}</Text>
-            <Text style={styles.reviews}>({product.reviews} reviews)</Text>
-          </View>
+          {(product.rating || product.reviews) && (
+            <View style={styles.ratingContainer}>
+              <Text style={styles.rating}>⭐ {product.rating || 4.5}</Text>
+              <Text style={styles.reviews}>({product.reviews || 0} reviews)</Text>
+            </View>
+          )}
+          {product.seller && (
+            <Text style={styles.seller}>
+              by {product.seller.firstName} {product.seller.lastName}
+            </Text>
+          )}
         </View>
-        {!product.inStock && (
+        {product.inStock === false && (
           <View style={styles.outOfStockBadge}>
             <Text style={styles.outOfStockText}>Out of Stock</Text>
           </View>
@@ -54,7 +69,9 @@ export default function ProductCard({
       </Text>
       
       <View style={styles.footer}>
-        <Text style={styles.category}>{product.category}</Text>
+        {product.category && (
+          <Text style={styles.category}>{product.category}</Text>
+        )}
         <Text style={styles.date}>
           {new Date(product.createdAt).toLocaleDateString()}
         </Text>
@@ -159,6 +176,12 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginLeft: 6,
     fontWeight: '500',
+  },
+  seller: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   category: {
     fontSize: 12,

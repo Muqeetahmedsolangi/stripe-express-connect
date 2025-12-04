@@ -3,6 +3,10 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 export interface User {
   id?: string;
   email: string;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  role?: 'user' | 'seller' | 'admin';
   token: string;
   refreshToken: string;
 }
@@ -41,6 +45,22 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.error = action.payload;
     },
+    registerStart: (state) => {
+      state.isLoading = true;
+      state.error = null;
+    },
+    registerSuccess: (state, action: PayloadAction<User>) => {
+      state.isLoading = false;
+      state.user = action.payload;
+      state.isAuthenticated = true;
+      state.error = null;
+    },
+    registerFailure: (state, action: PayloadAction<string>) => {
+      state.isLoading = false;
+      state.user = null;
+      state.isAuthenticated = false;
+      state.error = action.payload;
+    },
     logout: (state) => {
       state.user = null;
       state.isAuthenticated = false;
@@ -73,6 +93,9 @@ export const {
   loginStart,
   loginSuccess,
   loginFailure,
+  registerStart,
+  registerSuccess,
+  registerFailure,
   logout,
   refreshTokenStart,
   refreshTokenSuccess,

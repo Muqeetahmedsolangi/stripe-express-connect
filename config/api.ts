@@ -3,7 +3,7 @@ import axios from 'axios';
 
 // API Configuration
 export const API_BASE_URL = __DEV__ 
-  ? 'https://picked-broadband-facing-winner.trycloudflare.com/api' 
+  ? 'http://10.200.43.47:3001/api' 
   : 'https://your-production-api.com/api';
 
 // Create axios instance

@@ -81,7 +81,7 @@ export default function TabTwoScreen() {
               <FlatList
                 data={products}
                 renderItem={renderProduct}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => item.id.toString()}
                 contentContainerStyle={styles.productsContainer}
                 showsVerticalScrollIndicator={false}
               />

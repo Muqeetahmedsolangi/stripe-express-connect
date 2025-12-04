@@ -8,7 +8,7 @@ import {
   refreshTokenSuccess,
 } from "../store/slices/authSlice";
 
-const BACKEND_API_URL = "https://picked-broadband-facing-winner.trycloudflare.com/api";
+const BACKEND_API_URL = "https://indicators-wealth-grill-open.trycloudflare.com/api";
 
 const api = axios.create({
   baseURL: BACKEND_API_URL,
