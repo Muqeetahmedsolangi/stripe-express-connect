@@ -33,13 +33,12 @@ export default function HomeScreen() {
     try {
       const response = await productsApi.getAllProducts();
       if (response.status === 'success' && response.data) {
-        // Add mock categories and ratings for display
         const productsWithExtras = response.data.products.map(product => ({
           ...product,
-          category: 'General', // You can categorize based on product name or add categories to backend
-          rating: 4.5 + Math.random() * 0.5, // Mock rating
-          reviews: Math.floor(Math.random() * 200) + 10,
-          inStock: true,
+          category: product.category || 'General',
+          rating: product.rating || 4.5,
+          reviews: product.reviews || 0,
+          inStock: product.inStock !== undefined ? product.inStock : true,
         }));
         dispatch(fetchProductsSuccess(productsWithExtras));
       } else {

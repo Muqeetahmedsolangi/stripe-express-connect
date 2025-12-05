@@ -9,6 +9,10 @@ export interface User {
   role?: 'user' | 'seller' | 'admin';
   token: string;
   refreshToken: string;
+  stripeAccountId?: string;
+  onboardingCompleted?: boolean;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
 }
 
 interface AuthState {

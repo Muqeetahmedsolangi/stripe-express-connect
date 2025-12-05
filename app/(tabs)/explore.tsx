@@ -1,45 +1,18 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, FlatList, Alert } from 'react-native';
-import { useDispatch, useSelector } from 'react-redux';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSelector } from 'react-redux';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import StripeConnectButton from '@/components/StripeConnectButton';
-import CreateProductForm from '@/components/CreateProductForm';
-import ProductCard from '@/components/ProductCard';
+import ProductManagement from '@/components/ProductManagement';
+import SellerEarningsDashboard from '@/components/SellerEarningsDashboard';
 import { RootState } from '@/store';
-import { deleteProduct } from '@/store/slices/productsSlice';
 
 export default function TabTwoScreen() {
-  const dispatch = useDispatch();
-  const { products } = useSelector((state: RootState) => state.products);
   const { isConnected } = useSelector((state: RootState) => state.stripe);
-  const [activeTab, setActiveTab] = useState<'connect' | 'create' | 'list'>('connect');
-
-  const handleDeleteProduct = (productId: string) => {
-    Alert.alert(
-      'Delete Product',
-      'Are you sure you want to delete this product?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => dispatch(deleteProduct(productId)),
-        },
-      ]
-    );
-  };
-
-  const renderProduct = ({ item }: { item: any }) => (
-    <ProductCard
-      product={item}
-      showActions
-      onEdit={() => Alert.alert('Edit', 'Edit functionality coming soon!')}
-      onDelete={() => handleDeleteProduct(item.id)}
-    />
-  );
+  const [activeTab, setActiveTab] = useState<'connect' | 'manage' | 'earnings'>('connect');
 
   const getTabContent = () => {
     if (!isConnected && activeTab !== 'connect') {
@@ -61,43 +34,14 @@ export default function TabTwoScreen() {
         return (
           <View style={styles.connectContainer}>
             <StripeConnectButton 
-              onConnectionComplete={() => setActiveTab('create')} 
+              onConnectionComplete={() => setActiveTab('manage')} 
             />
           </View>
         );
-      case 'create':
-        return (
-          <CreateProductForm 
-            onProductCreated={() => setActiveTab('list')} 
-          />
-        );
-      case 'list':
-        return (
-          <View style={styles.listContainer}>
-            <ThemedText type="subtitle" style={styles.listTitle}>
-              Your Products ({products.length})
-            </ThemedText>
-            {products.length > 0 ? (
-              <FlatList
-                data={products}
-                renderItem={renderProduct}
-                keyExtractor={(item) => item.id.toString()}
-                contentContainerStyle={styles.productsContainer}
-                showsVerticalScrollIndicator={false}
-              />
-            ) : (
-              <View style={styles.emptyContainer}>
-                <ThemedText>No products yet. Create your first product!</ThemedText>
-                <TouchableOpacity
-                  style={styles.createButton}
-                  onPress={() => setActiveTab('create')}
-                >
-                  <ThemedText style={styles.createButtonText}>Create Product</ThemedText>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        );
+      case 'manage':
+        return <ProductManagement />;
+      case 'earnings':
+        return <SellerEarningsDashboard />;
       default:
         return null;
     }
@@ -134,40 +78,40 @@ export default function TabTwoScreen() {
           <TouchableOpacity
             style={[
               styles.tabButton,
-              activeTab === 'create' && styles.activeTab,
+              activeTab === 'manage' && styles.activeTab,
               !isConnected && styles.disabledTab,
             ]}
-            onPress={() => isConnected && setActiveTab('create')}
+            onPress={() => isConnected && setActiveTab('manage')}
             disabled={!isConnected}
           >
             <ThemedText
               style={[
                 styles.tabButtonText,
-                activeTab === 'create' && styles.activeTabText,
+                activeTab === 'manage' && styles.activeTabText,
                 !isConnected && styles.disabledTabText,
               ]}
             >
-              ➕ Create
+              📦 Products
             </ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
               styles.tabButton,
-              activeTab === 'list' && styles.activeTab,
+              activeTab === 'earnings' && styles.activeTab,
               !isConnected && styles.disabledTab,
             ]}
-            onPress={() => isConnected && setActiveTab('list')}
+            onPress={() => isConnected && setActiveTab('earnings')}
             disabled={!isConnected}
           >
             <ThemedText
               style={[
                 styles.tabButtonText,
-                activeTab === 'list' && styles.activeTabText,
+                activeTab === 'earnings' && styles.activeTabText,
                 !isConnected && styles.disabledTabText,
               ]}
             >
-              📋 List ({products.length})
+              💰 Earnings
             </ThemedText>
           </TouchableOpacity>
         </View>
@@ -238,35 +182,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 20,
-  },
-  listContainer: {
-    flex: 1,
-    padding: 20,
-  },
-  listTitle: {
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  productsContainer: {
-    paddingBottom: 20,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  createButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  createButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
   },
   notConnectedContainer: {
     flex: 1,

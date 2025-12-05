@@ -1,3 +1,5 @@
+import { api } from './api';
+
 interface StripeAccount {
   id: string;
   charges_enabled: boolean;
@@ -22,32 +24,32 @@ interface AccountStatusResponse {
 
 export const stripeApi = {
   // Create a Stripe Express account
-  createExpressAccount: async (): Promise<CreateAccountResponse> => {
+  createExpressAccount: async (email: string): Promise<CreateAccountResponse> => {
     try {
-      // In a real app, this would call your backend to create a Stripe Express account
-      // For demo purposes, we'll simulate the response
-      const mockAccountId = 'acct_' + Date.now();
-      const mockOnboardingUrl = `https://connect.stripe.com/express/oauth/authorize?client_id=ca_demo&state=${mockAccountId}`;
+      const response = await api.post('/connect/create-onboarding-link', { email });
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      return {
-        success: true,
-        account: {
-          id: mockAccountId,
-          charges_enabled: false,
-          details_submitted: false,
-          payouts_enabled: false,
-          onboarding_url: mockOnboardingUrl,
-        },
-        onboarding_url: mockOnboardingUrl,
-      };
-    } catch (error) {
+      if (response.data.status === 'success') {
+        return {
+          success: true,
+          account: {
+            id: response.data.data.stripeAccountId,
+            charges_enabled: response.data.data.accountDetails.charges_enabled,
+            details_submitted: response.data.data.accountDetails.details_submitted,
+            payouts_enabled: response.data.data.accountDetails.payouts_enabled,
+          },
+          onboarding_url: response.data.data.onboardingUrl,
+        };
+      } else {
+        return {
+          success: false,
+          error: response.data.message || 'Failed to create onboarding link',
+        };
+      }
+    } catch (error: any) {
       console.error('Create Express account error:', error);
       return {
         success: false,
-        error: 'Failed to create Stripe Express account',
+        error: error.response?.data?.message || 'Failed to create Stripe Express account',
       };
     }
   },
@@ -55,34 +57,52 @@ export const stripeApi = {
   // Check account status
   getAccountStatus: async (accountId?: string): Promise<AccountStatusResponse> => {
     try {
-      // In a real app, this would check the actual Stripe account status
-      // For demo purposes, we'll check localStorage to see if onboarding was completed
-      const isOnboardingComplete = await isStripeOnboardingComplete();
-      
-      if (isOnboardingComplete) {
-        return {
-          success: true,
-          account: {
-            id: accountId || 'acct_demo',
-            charges_enabled: true,
-            details_submitted: true,
-            payouts_enabled: true,
-          },
-          is_connected: true,
-        };
+      if (accountId) {
+        const response = await api.get(`/connect/status/${accountId}`);
+        
+        if (response.data.status === 'success') {
+          const { data } = response.data;
+          return {
+            success: true,
+            account: {
+              id: data.accountId,
+              charges_enabled: data.charges_enabled,
+              details_submitted: data.details_submitted,
+              payouts_enabled: data.payouts_enabled,
+            },
+            is_connected: data.onboarding_completed,
+          };
+        }
       } else {
-        return {
-          success: true,
-          account: undefined,
-          is_connected: false,
-        };
+        // Get current user's account info
+        const response = await api.get('/connect/account-info');
+        
+        if (response.data.status === 'success') {
+          const { data } = response.data;
+          return {
+            success: true,
+            account: data.hasConnectAccount ? {
+              id: data.stripeAccountId,
+              charges_enabled: data.charges_enabled || data.chargesEnabled,
+              details_submitted: data.details_submitted,
+              payouts_enabled: data.payouts_enabled || data.payoutsEnabled,
+            } : undefined,
+            is_connected: data.onboardingCompleted,
+          };
+        }
       }
-    } catch (error) {
+      
+      return {
+        success: true,
+        account: undefined,
+        is_connected: false,
+      };
+    } catch (error: any) {
       console.error('Get account status error:', error);
       return {
         success: false,
         is_connected: false,
-        error: 'Failed to check account status',
+        error: error.response?.data?.message || 'Failed to check account status',
       };
     }
   },
@@ -90,33 +110,17 @@ export const stripeApi = {
   // Handle return from Stripe onboarding
   handleOnboardingReturn: async (accountId: string): Promise<{ success: boolean }> => {
     try {
-      // Mark onboarding as complete in local storage
-      await markStripeOnboardingComplete(accountId);
-      return { success: true };
-    } catch (error) {
+      const response = await api.get(`/connect/success/${accountId}`);
+      
+      if (response.data.status === 'success') {
+        return { success: true };
+      } else {
+        return { success: false };
+      }
+    } catch (error: any) {
       console.error('Handle onboarding return error:', error);
       return { success: false };
     }
   },
 };
 
-// Helper functions for demo purposes
-const isStripeOnboardingComplete = async (): Promise<boolean> => {
-  try {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-    const isComplete = await AsyncStorage.getItem('stripe_onboarding_complete');
-    return isComplete === 'true';
-  } catch {
-    return false;
-  }
-};
-
-const markStripeOnboardingComplete = async (accountId: string): Promise<void> => {
-  try {
-    const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-    await AsyncStorage.setItem('stripe_onboarding_complete', 'true');
-    await AsyncStorage.setItem('stripe_account_id', accountId);
-  } catch (error) {
-    console.error('Error marking onboarding complete:', error);
-  }
-};

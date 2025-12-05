@@ -226,26 +226,26 @@ export default function OrderDetailScreen() {
           
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Subtotal</Text>
-            <Text style={styles.priceValue}>${order.subtotal.toFixed(2)}</Text>
+            <Text style={styles.priceValue}>${Number(order.subtotal || 0).toFixed(2)}</Text>
           </View>
           
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>
-              Government Tax ({(order.governmentTaxRate * 100).toFixed(2)}%)
+              Government Tax ({(Number(order.governmentTaxRate || 0) * 100).toFixed(2)}%)
             </Text>
-            <Text style={styles.priceValue}>${order.governmentTax.toFixed(2)}</Text>
+            <Text style={styles.priceValue}>${Number(order.governmentTax || 0).toFixed(2)}</Text>
           </View>
           
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>
-              Platform Fee ({(order.platformFeeRate * 100).toFixed(2)}%)
+              Platform Fee ({(Number(order.platformFeeRate || 0) * 100).toFixed(2)}%)
             </Text>
-            <Text style={styles.priceValue}>${order.platformFee.toFixed(2)}</Text>
+            <Text style={styles.priceValue}>${Number(order.platformFee || 0).toFixed(2)}</Text>
           </View>
           
           <View style={[styles.priceRow, styles.totalRow]}>
             <Text style={styles.totalLabel}>Total Paid</Text>
-            <Text style={styles.totalValue}>${order.total.toFixed(2)} {order.currency}</Text>
+            <Text style={styles.totalValue}>${Number(order.total || 0).toFixed(2)} {order.currency}</Text>
           </View>
         </View>
 

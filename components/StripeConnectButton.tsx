@@ -5,9 +5,11 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   Alert, 
-  ActivityIndicator 
+  ActivityIndicator,
+  Modal
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store';
 import { 
@@ -16,8 +18,7 @@ import {
   createAccountFailure,
   checkStatusStart,
   checkStatusSuccess,
-  checkStatusFailure,
-  completeOnboarding 
+  checkStatusFailure
 } from '../store/slices/stripeSlice';
 import { stripeApi } from '../repository/stripeApi';
 
@@ -30,7 +31,9 @@ export default function StripeConnectButton({ onConnectionComplete }: StripeConn
   const { isConnected, isLoading, account, error } = useSelector(
     (state: RootState) => state.stripe
   );
-  const [webBrowserOpen, setWebBrowserOpen] = useState(false);
+  const { user } = useSelector((state: RootState) => state.auth);
+  const [webViewVisible, setWebViewVisible] = useState(false);
+  const [onboardingUrl, setOnboardingUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Check connection status on mount
@@ -60,22 +63,29 @@ export default function StripeConnectButton({ onConnectionComplete }: StripeConn
       return;
     }
 
+    if (!user?.email) {
+      Alert.alert('Error', 'User email is required for Stripe Connect');
+      return;
+    }
+
     dispatch(createAccountStart());
     
     try {
-      const response = await stripeApi.createExpressAccount();
+      const response = await stripeApi.createExpressAccount(user.email);
       
-      if (response.success && response.onboarding_url) {
+      // Validate response as requested
+      if (response.success && response.onboarding_url && response.account) {
         dispatch(createAccountSuccess({
-          account: response.account!,
+          account: response.account,
           onboardingUrl: response.onboarding_url,
         }));
         
-        // Open Stripe onboarding in web browser
-        await openStripeOnboarding(response.onboarding_url);
+        // Open Stripe onboarding in in-app web view
+        setOnboardingUrl(response.onboarding_url);
+        setWebViewVisible(true);
       } else {
         dispatch(createAccountFailure(response.error || 'Failed to create account'));
-        Alert.alert('Error', 'Failed to start Stripe onboarding');
+        Alert.alert('Error', response.error || 'Failed to start Stripe onboarding');
       }
     } catch (error) {
       dispatch(createAccountFailure('Network error'));
@@ -83,57 +93,86 @@ export default function StripeConnectButton({ onConnectionComplete }: StripeConn
     }
   };
 
-  const openStripeOnboarding = async (url: string) => {
-    try {
-      setWebBrowserOpen(true);
+  const handleWebViewNavigationStateChange = (navState: any) => {
+    const { url } = navState;
+    console.log('WebView URL changed:', url);
+    
+    // Check if URL matches success return URL pattern
+    if (url.includes('/connect/success')) {
+      console.log('Success URL detected, extracting account ID...');
       
-      const result = await WebBrowser.openBrowserAsync(url, {
-        // iOS options
-        controlsColor: '#007AFF',
-        dismissButtonStyle: 'close',
-        readerMode: false,
-        // Android options
-        showTitle: true,
-        toolbarColor: '#007AFF',
-        enableUrlBarHiding: true,
-        enableDefaultShare: false,
-      });
-
-      setWebBrowserOpen(false);
-
-      if (result.type === 'dismiss' || result.type === 'cancel') {
-        // User closed the browser, check if onboarding was completed
-        setTimeout(() => {
-          handleOnboardingReturn();
-        }, 1000);
+      try {
+        // Extract account ID from URL if present
+        const urlParts = url.split('?');
+        if (urlParts.length > 1) {
+          const urlParams = new URLSearchParams(urlParts[1]);
+          const accountId = urlParams.get('account_id');
+          console.log('Account ID from URL:', accountId);
+          console.log('Current account ID:', account?.id);
+          
+          if (accountId) {
+            // Call backend to update status and then update local state
+            handleOnboardingReturn(accountId);
+          } else {
+            console.log('No account_id in URL, using current account ID');
+            if (account?.id) {
+              handleOnboardingReturn(account.id);
+            }
+          }
+        } else {
+          console.log('No query params in URL, using current account ID');
+          if (account?.id) {
+            handleOnboardingReturn(account.id);
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing return URL:', error);
+        // Fallback to current account ID
+        if (account?.id) {
+          handleOnboardingReturn(account.id);
+        }
       }
-    } catch (error) {
-      setWebBrowserOpen(false);
-      console.error('Error opening browser:', error);
-      Alert.alert('Error', 'Failed to open Stripe onboarding');
+      
+      // Close WebView
+      setWebViewVisible(false);
+      setOnboardingUrl(null);
     }
   };
 
-  const handleOnboardingReturn = async () => {
-    if (!account?.id) return;
+  const closeWebView = () => {
+    setWebViewVisible(false);
+    setOnboardingUrl(null);
+  };
+
+  const handleOnboardingReturn = async (accountId?: string) => {
+    const finalAccountId = accountId || account?.id;
+    
+    if (!finalAccountId) {
+      console.error('No account ID available for onboarding return');
+      Alert.alert('Error', 'Unable to complete onboarding - missing account ID');
+      return;
+    }
+
+    console.log('Processing onboarding return for account:', finalAccountId);
 
     try {
-      // Mark onboarding as complete (in real app, verify with backend)
-      await stripeApi.handleOnboardingReturn(account.id);
+      // Call backend to verify and update onboarding status
+      const result = await stripeApi.handleOnboardingReturn(finalAccountId);
       
-      // Dispatch success and update state
-      dispatch(completeOnboarding({
-        id: account.id,
-        charges_enabled: true,
-        details_submitted: true,
-        payouts_enabled: true,
-      }));
-
-      Alert.alert(
-        'Success!', 
-        'Your bank account has been connected successfully. You can now create and manage products.',
-        [{ text: 'OK', onPress: onConnectionComplete }]
-      );
+      if (result.success) {
+        // Refresh account status from backend to get latest data
+        console.log('Onboarding return successful, refreshing status...');
+        await checkStripeStatus();
+        
+        Alert.alert(
+          'Success!', 
+          'Your bank account has been connected successfully. You can now create and manage products.',
+          [{ text: 'OK', onPress: onConnectionComplete }]
+        );
+      } else {
+        console.error('Backend reported onboarding return failed');
+        Alert.alert('Error', 'Failed to complete onboarding verification');
+      }
     } catch (error) {
       console.error('Error handling onboarding return:', error);
       Alert.alert('Error', 'Failed to complete onboarding');
@@ -146,7 +185,7 @@ export default function StripeConnectButton({ onConnectionComplete }: StripeConn
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="white" />
           <Text style={styles.buttonText}>
-            {webBrowserOpen ? 'Opening browser...' : 'Checking status...'}
+            {webViewVisible ? 'Opening onboarding...' : 'Checking status...'}
           </Text>
         </View>
       );
@@ -198,6 +237,45 @@ export default function StripeConnectButton({ onConnectionComplete }: StripeConn
       <Text style={styles.disclaimer}>
         Powered by Stripe Express Connect. Secure and compliant payment processing.
       </Text>
+
+      {/* WebView Modal for Stripe Onboarding */}
+      <Modal
+        visible={webViewVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeWebView}
+      >
+        <SafeAreaView style={styles.webViewContainer}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity
+              onPress={closeWebView}
+              style={styles.closeButton}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.webViewTitle}>Stripe Connect Setup</Text>
+            <View style={styles.closeButtonPlaceholder} />
+          </View>
+          
+          {onboardingUrl && (
+            <WebView
+              source={{ uri: onboardingUrl }}
+              onNavigationStateChange={handleWebViewNavigationStateChange}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webViewLoading}>
+                  <ActivityIndicator size="large" color="#635BFF" />
+                  <Text style={styles.loadingText}>Loading Stripe Connect...</Text>
+                </View>
+              )}
+              style={styles.webView}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              allowsBackForwardNavigationGestures={true}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -272,5 +350,55 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     fontStyle: 'italic',
+  },
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  webViewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#f8f9fa',
+  },
+  webViewTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  closeButtonPlaceholder: {
+    width: 32,
+  },
+  webView: {
+    flex: 1,
+  },
+  webViewLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
   },
 });

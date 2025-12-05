@@ -17,6 +17,11 @@ export interface Product {
   };
   createdAt: string;
   updatedAt: string;
+  // For display purposes
+  category?: string;
+  rating?: number;
+  reviews?: number;
+  inStock?: boolean;
 }
 
 export interface CreateProductRequest {
@@ -140,8 +145,7 @@ export const productsApi = {
   // Get user's products (requires authentication)
   getUserProducts: async (): Promise<ProductsResponse> => {
     try {
-      const response = await api.get('/products');
-      // Filter by current user - this would be handled by backend with proper user filtering
+      const response = await api.get('/products/my-products');
       return {
         status: 'success',
         results: response.data.results,
