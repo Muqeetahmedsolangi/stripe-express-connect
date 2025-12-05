@@ -1,8 +1,8 @@
 import { api } from './api';
-import { CreatePaymentIntentRequest, PaymentIntentResponse, ConfirmPaymentRequest, ConfirmPaymentResponse } from './ordersApi';
+import { ConfirmPaymentRequest, ConfirmPaymentResponse, CreatePaymentIntentRequest, PaymentIntentResponse } from './ordersApi';
 
 // Demo Stripe publishable key - replace with your actual key
-export const STRIPE_PUBLISHABLE_KEY = 'pk_test_51234567890abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqrstuvwxyz12';
+export const STRIPE_PUBLISHABLE_KEY = 'k_test_51Pacl7D14xfJoKMAjaiJywsdOO811qnPzP7W47r0kW08u3cQJIG8kbd0OZfz7nbaL2ZMycR5jmuL6baxhRVgx4tA00OWNiJXQ7';
 
 export const paymentApi = {
   // Create payment intent - now uses backend API

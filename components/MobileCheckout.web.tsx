@@ -191,28 +191,144 @@ const styles = StyleSheet.create({
   placeholder: {
     width: 60,
   },
-  webNotSupported: {
+  scrollView: {
+    flex: 1,
+  },
+  section: {
+    backgroundColor: '#FFFFFF',
+    margin: 16,
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  customerInfo: {
+    paddingVertical: 8,
+  },
+  customerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  customerEmail: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  orderItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  itemInfo: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  itemDetails: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  itemTotal: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  priceValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  totalRow: {
+    borderTopWidth: 2,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 12,
+    marginTop: 8,
+  },
+  totalLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4F46E5',
+  },
+  webPaymentContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  webIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  webPaymentTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  webPaymentMessage: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  mobileAppButton: {
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  mobileAppButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  webIcon: {
+  emptyIcon: {
     fontSize: 80,
     marginBottom: 20,
   },
-  webTitle: {
+  emptyTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  webMessage: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
     marginBottom: 32,
   },
   backButton: {

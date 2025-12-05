@@ -1,26 +1,37 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  SafeAreaView,
-  ActivityIndicator,
-} from 'react-native';
-import { useSelector, useDispatch } from 'react-redux';
+import { StripeProvider, initPaymentSheet, presentPaymentSheet, useStripe } from '@stripe/stripe-react-native';
 import { router } from 'expo-router';
-import { CardField, useStripe, StripeProvider } from '@stripe/stripe-react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useDispatch, useSelector } from 'react-redux';
 
+import { ordersApi } from '@/repository/ordersApi';
 import { RootState } from '@/store';
 import { clearCart } from '@/store/slices/cartSlice';
-import { ordersApi } from '@/repository/ordersApi';
 import { parsePrice } from '@/utils/priceUtils';
 
+const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY as string || "pk_test_51Pacl7D14xfJoKMAjaiJywsdOO811qnPzP7W47r0kW08u3cQJIG8kbd0OZfz7nbaL2ZMycR5jmuL6baxhRVgx4tA00OWNiJXQ7";
+
 export default function MobileCheckout() {
+  const stripeProps = Platform.OS !== 'web' ? {
+    publishableKey: STRIPE_PUBLISHABLE_KEY,
+    merchantIdentifier: "merchant.com.yourstore",
+    urlScheme: "stripeexpressconnect"
+  } : {
+    publishableKey: STRIPE_PUBLISHABLE_KEY
+  };
+
   return (
-    <StripeProvider publishableKey="pk_test_51QTBhYFnKMRqB3vPqUTUTmZOJHYqFMYYVGVdmFwkPhPgjqM8DRNHG1y34L1LV7vO6K7Zp1FtOGZCOJQq6KK5GGkq00rNRShNWs">
+    <StripeProvider {...stripeProps}>
       <CheckoutContent />
     </StripeProvider>
   );
@@ -33,7 +44,9 @@ function CheckoutContent() {
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentReady, setPaymentReady] = useState(false);
+  const [paymentSheetReady, setPaymentSheetReady] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string>('');
+  const [paymentIntentId, setPaymentIntentId] = useState<string>('');
   const [breakdown, setBreakdown] = useState({
     subtotal: 0,
     governmentTax: 0,
@@ -63,29 +76,40 @@ function CheckoutContent() {
       platformFee: Math.round(platformFee * 100) / 100,
       total: Math.round(total * 100) / 100,
     });
+
+    // Initialize payment sheet only if we have items
+    if (items.length > 0) {
+      initializePaymentSheet();
+    }
   }, [items, totalPrice]);
 
-  const handlePayment = async () => {
-    if (!stripe) {
-      Alert.alert('Error', 'Stripe is not ready. Please try again.');
-      return;
-    }
-
-    if (!paymentReady) {
-      Alert.alert('Error', 'Please enter your payment information.');
-      return;
-    }
-
-    setIsProcessing(true);
-
+  const initializePaymentSheet = async () => {
     try {
+      // Check if we have valid items
+      if (!items || items.length === 0) {
+        console.log('No items in cart, skipping payment initialization');
+        return;
+      }
+
+      // Validate all items have proper product IDs
+      const invalidItems = items.filter(item => !item.product || !item.product.id);
+      if (invalidItems.length > 0) {
+        console.log('Invalid items found:', invalidItems);
+        Alert.alert(
+          'Cart Error',
+          'Some items in your cart are invalid. Please remove them and try again.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
       // Prepare items for backend
       const backendItems = items.map(item => ({
         productId: item.product.id,
         quantity: item.quantity,
       }));
 
-      // Step 1: Create payment intent with backend
+      // Create payment intent with backend
       const paymentIntentResponse = await ordersApi.createPaymentIntent({
         items: backendItems,
       });
@@ -94,18 +118,58 @@ function CheckoutContent() {
         throw new Error(paymentIntentResponse.message || 'Failed to create payment intent');
       }
 
-      const { clientSecret, paymentIntentId } = paymentIntentResponse.data;
+      const { clientSecret: secret, paymentIntentId: intentId } = paymentIntentResponse.data;
+      setClientSecret(secret);
+      setPaymentIntentId(intentId);
 
-      // Step 2: Confirm payment with Stripe
-      const { error: paymentError } = await stripe.confirmPayment(clientSecret, {
-        paymentMethodType: 'Card',
+      // Initialize the payment sheet
+      const { error } = await initPaymentSheet({
+        merchantDisplayName: 'Your Store',
+        paymentIntentClientSecret: secret,
+        defaultBillingDetails: {
+          name: `${user?.firstName} ${user?.lastName}`,
+          email: user?.email,
+        },
+        allowsDelayedPaymentMethods: true,
+        returnURL: 'stripeexpressconnect://stripe-redirect',
       });
 
-      if (paymentError) {
-        throw new Error(paymentError.message || 'Payment failed');
+      if (error) {
+        console.error('Payment sheet initialization error:', error);
+      } else {
+        setPaymentSheetReady(true);
+      }
+    } catch (error: any) {
+      console.error('Payment initialization error:', error);
+      Alert.alert(
+        'Payment Setup Failed',
+        error.message || 'Unable to setup payment. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handlePayment = async () => {
+    if (!paymentSheetReady) {
+      Alert.alert('Error', 'Payment is not ready. Please wait and try again.');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // Present the payment sheet
+      const { error } = await presentPaymentSheet();
+
+      if (error) {
+        // User cancelled or payment failed
+        if (error.code !== 'Canceled') {
+          Alert.alert('Payment Failed', error.message || 'Something went wrong. Please try again.');
+        }
+        return;
       }
 
-      // Step 3: Confirm payment with backend
+      // Payment successful! Confirm with backend
       const confirmResponse = await ordersApi.confirmPayment({
         paymentIntentId,
       });
@@ -192,39 +256,24 @@ function CheckoutContent() {
     </View>
   );
 
-  const renderPaymentForm = () => (
+  const renderPaymentSection = () => (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Payment Information</Text>
+      <Text style={styles.sectionTitle}>Payment</Text>
       
-      <View style={styles.cardFieldContainer}>
-        <CardField
-          postalCodeEnabled={false}
-          placeholders={{
-            number: '4242 4242 4242 4242',
-          }}
-          cardStyle={{
-            backgroundColor: '#FFFFFF',
-            textColor: '#000000',
-            fontSize: 16,
-            placeholderColor: '#9CA3AF',
-            borderWidth: 1,
-            borderColor: '#E5E7EB',
-            borderRadius: 8,
-          }}
-          style={{
-            width: '100%',
-            height: 50,
-            marginVertical: 10,
-          }}
-          onCardChange={(cardDetails: any) => {
-            setPaymentReady(cardDetails.complete);
-          }}
-        />
+      <View style={styles.paymentContainer}>
+        <Text style={styles.paymentIcon}>🔒</Text>
+        <Text style={styles.paymentTitle}>Secure Payment</Text>
+        <Text style={styles.paymentDescription}>
+          Your payment will be processed securely through Stripe. Tap "Pay Now" to continue with your preferred payment method.
+        </Text>
+        
+        {!paymentSheetReady && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#4F46E5" />
+            <Text style={styles.loadingText}>Setting up payment...</Text>
+          </View>
+        )}
       </View>
-      
-      <Text style={styles.cardNote}>
-        💡 Test card: Use 4242 4242 4242 4242 with any future date and CVC
-      </Text>
     </View>
   );
 
@@ -270,7 +319,7 @@ function CheckoutContent() {
 
         {renderOrderSummary()}
         {renderPriceBreakdown()}
-        {renderPaymentForm()}
+        {renderPaymentSection()}
       </ScrollView>
 
       {/* Checkout Button */}
@@ -278,19 +327,23 @@ function CheckoutContent() {
         <TouchableOpacity
           style={[
             styles.checkoutButton,
-            (!paymentReady || isProcessing) && styles.disabledButton
+            (!paymentSheetReady || isProcessing) && styles.disabledButton
           ]}
           onPress={handlePayment}
-          disabled={!paymentReady || isProcessing}
+          disabled={!paymentSheetReady || isProcessing}
         >
           {isProcessing ? (
             <View style={styles.processingContainer}>
               <ActivityIndicator size="small" color="#FFFFFF" />
               <Text style={styles.checkoutButtonText}>Processing...</Text>
             </View>
+          ) : !paymentSheetReady ? (
+            <Text style={styles.checkoutButtonText}>
+              Setting up payment...
+            </Text>
           ) : (
             <Text style={styles.checkoutButtonText}>
-              Pay ${breakdown.total.toFixed(2)}
+              Pay Now ${breakdown.total.toFixed(2)}
             </Text>
           )}
         </TouchableOpacity>
@@ -422,15 +475,38 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4F46E5',
   },
-  cardFieldContainer: {
-    marginVertical: 8,
+  paymentContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
   },
-  cardNote: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
-    marginTop: 8,
+  paymentIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  paymentTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
     textAlign: 'center',
+  },
+  paymentDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+    paddingHorizontal: 20,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
   footer: {
     backgroundColor: '#FFFFFF',
