@@ -1,19 +1,19 @@
+import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
-import { router } from 'expo-router';
-import { RootState } from '../store';
-import { loginStart, loginSuccess, loginFailure } from '../store/slices/authSlice';
 import { authApi } from '../repository/authApi';
+import { RootState } from '../store';
+import { loginFailure, loginStart, loginSuccess } from '../store/slices/authSlice';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -32,7 +32,31 @@ export default function LoginScreen() {
       const response = await authApi.login({ email, password });
 
       if (response.success) {
-        dispatch(loginSuccess(response.user));
+        // Fetch full user data to ensure we have all fields including role
+        try {
+          const meResponse = await authApi.getMe();
+          if (meResponse.success && meResponse.user) {
+            // Use the full user data from /auth/me endpoint
+            const fullUser = {
+              id: meResponse.user.id.toString(),
+              email: meResponse.user.email,
+              firstName: meResponse.user.firstName || '',
+              lastName: meResponse.user.lastName || '',
+              phoneNumber: meResponse.user.phoneNumber || '',
+              role: meResponse.user.role || 'user',
+              token: response.user.token,
+              refreshToken: response.user.refreshToken,
+            };
+            dispatch(loginSuccess(fullUser));
+          } else {
+            // Fallback to login response user data
+            dispatch(loginSuccess(response.user));
+          }
+        } catch (meError) {
+          // If /auth/me fails, use login response data
+          console.log('Failed to fetch user details, using login response:', meError);
+          dispatch(loginSuccess(response.user));
+        }
         router.replace('/(tabs)');
       } else {
         dispatch(loginFailure(response.message || 'Login failed'));

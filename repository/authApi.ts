@@ -83,15 +83,26 @@ export const authApi = {
         // Store token in AsyncStorage
         await AsyncStorage.setItem('authToken', response.data.token);
         
+        // Extract all user fields from backend response
+        const backendUser = response.data.data.user;
+        
         return {
           success: true,
           status: 'success',
           message: response.data.message,
           user: {
-            id: response.data.data.user.id.toString(),
-            email: response.data.data.user.email,
+            id: backendUser.id.toString(),
+            email: backendUser.email,
+            firstName: backendUser.firstName || '',
+            lastName: backendUser.lastName || '',
+            phoneNumber: backendUser.phoneNumber || '',
+            role: backendUser.role || 'user', // Include role field
             token: response.data.token,
             refreshToken: response.data.token, // Using same token for now since backend doesn't separate
+            stripeAccountId: backendUser.stripeAccountId || undefined,
+            onboardingCompleted: backendUser.onboardingCompleted || false,
+            chargesEnabled: backendUser.chargesEnabled || false,
+            payoutsEnabled: backendUser.payoutsEnabled || false,
           }
         };
       } else {
