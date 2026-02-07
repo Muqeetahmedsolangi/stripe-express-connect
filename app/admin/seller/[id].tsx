@@ -8,6 +8,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useSelector } from 'react-redux';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -23,12 +25,24 @@ interface SellerDetailsData {
   stripeAccount: any;
 }
 
+interface PayoutScheduleData {
+  scheduleType: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+  payoutDay: number | null;
+  payoutDate: string | null;
+}
+
 export default function SellerDetailsScreen() {
   const { user } = useSelector((state: RootState) => state.auth);
   const { id } = useLocalSearchParams<{ id: string }>();
   const [sellerData, setSellerData] = useState<SellerDetailsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [scheduleModal, setScheduleModal] = useState(false);
+  const [scheduleData, setScheduleData] = useState<PayoutScheduleData>({
+    scheduleType: null,
+    payoutDay: null,
+    payoutDate: null,
+  });
 
   useEffect(() => {
     if (user?.role === 'admin' && id) {
@@ -54,6 +68,55 @@ export default function SellerDetailsScreen() {
       console.error('Error fetching seller details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenScheduleModal = () => {
+    if (sellerData?.seller) {
+      setScheduleData({
+        scheduleType: sellerData.seller.payoutScheduleType || null,
+        payoutDay: sellerData.seller.payoutDay || null,
+        payoutDate: sellerData.seller.payoutDate ? new Date(sellerData.seller.payoutDate).toISOString().split('T')[0] : null,
+      });
+      setScheduleModal(true);
+    }
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!id) return;
+
+    // Validate based on schedule type
+    if (scheduleData.scheduleType === 'weekly' && scheduleData.payoutDay !== null) {
+      if (scheduleData.payoutDay < 0 || scheduleData.payoutDay > 6) {
+        Alert.alert('Error', 'Weekly payout day must be 0-6 (0=Sunday, 6=Saturday)');
+        return;
+      }
+    }
+
+    if (scheduleData.scheduleType === 'monthly' && scheduleData.payoutDay !== null) {
+      if (scheduleData.payoutDay < 1 || scheduleData.payoutDay > 31) {
+        Alert.alert('Error', 'Monthly payout day must be 1-31');
+        return;
+      }
+    }
+
+    if (scheduleData.scheduleType === 'custom' && !scheduleData.payoutDate) {
+      Alert.alert('Error', 'Please select a payout date for custom schedule');
+      return;
+    }
+
+    const response = await adminApi.updateSellerPayoutSchedule(parseInt(id), {
+      scheduleType: scheduleData.scheduleType,
+      payoutDay: scheduleData.payoutDay,
+      payoutDate: scheduleData.payoutDate || undefined,
+    });
+
+    if (response.status === 'success') {
+      Alert.alert('Success', 'Payout schedule updated successfully');
+      setScheduleModal(false);
+      fetchSellerDetails();
+    } else {
+      Alert.alert('Error', response.message || 'Failed to update payout schedule');
     }
   };
 
@@ -137,6 +200,73 @@ export default function SellerDetailsScreen() {
               <Text style={styles.statLabel}>Pending</Text>
             </View>
           </View>
+        </View>
+      </View>
+
+      {/* Payout Schedule */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Payout Schedule</Text>
+          <TouchableOpacity onPress={handleOpenScheduleModal}>
+            <Text style={styles.editButton}>✏️ Edit</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.infoCard}>
+          {seller.payoutScheduleType ? (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Schedule Type:</Text>
+                <Text style={styles.infoValue}>
+                  {seller.payoutScheduleType.charAt(0).toUpperCase() + seller.payoutScheduleType.slice(1)}
+                </Text>
+              </View>
+              {seller.payoutScheduleType === 'weekly' && seller.payoutDay !== null && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Day of Week:</Text>
+                  <Text style={styles.infoValue}>
+                    {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][seller.payoutDay]}
+                  </Text>
+                </View>
+              )}
+              {seller.payoutScheduleType === 'monthly' && seller.payoutDay !== null && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Day of Month:</Text>
+                  <Text style={styles.infoValue}>{seller.payoutDay}</Text>
+                </View>
+              )}
+              {seller.payoutScheduleType === 'custom' && seller.payoutDate && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Payout Date:</Text>
+                  <Text style={styles.infoValue}>
+                    {new Date(seller.payoutDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                </View>
+              )}
+              {seller.nextPayoutDate && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Next Payout:</Text>
+                  <Text style={[styles.infoValue, styles.nextPayoutDate]}>
+                    {new Date(seller.nextPayoutDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <View style={styles.noScheduleContainer}>
+              <Text style={styles.noScheduleText}>No payout schedule set</Text>
+              <Text style={styles.noScheduleSubtext}>
+                Set a schedule to automatically release payouts for this seller
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -298,6 +428,126 @@ export default function SellerDetailsScreen() {
           <Text style={styles.emptyText}>No payouts</Text>
         )}
       </View>
+
+      {/* Payout Schedule Modal */}
+      <Modal
+        visible={scheduleModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setScheduleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Payout Schedule</Text>
+            <Text style={styles.modalDescription}>
+              Configure when this seller will receive their payouts. All orders will be held until the payout date.
+            </Text>
+
+            <Text style={styles.modalLabel}>Schedule Type</Text>
+            <View style={styles.scheduleTypeContainer}>
+              {(['daily', 'weekly', 'monthly', 'custom'] as const).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.scheduleTypeButton,
+                    scheduleData.scheduleType === type && styles.scheduleTypeButtonActive,
+                  ]}
+                  onPress={() => {
+                    setScheduleData({
+                      ...scheduleData,
+                      scheduleType: type,
+                      payoutDay: type === 'daily' ? null : scheduleData.payoutDay,
+                      payoutDate: type !== 'custom' ? null : scheduleData.payoutDate,
+                    });
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.scheduleTypeText,
+                      scheduleData.scheduleType === type && styles.scheduleTypeTextActive,
+                    ]}
+                  >
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {scheduleData.scheduleType === 'weekly' && (
+              <>
+                <Text style={styles.modalLabel}>Day of Week (0=Sunday, 6=Saturday)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={scheduleData.payoutDay?.toString() || ''}
+                  onChangeText={(text) => {
+                    const num = text.replace(/[^0-9]/g, '');
+                    setScheduleData({
+                      ...scheduleData,
+                      payoutDay: num ? parseInt(num) : null,
+                    });
+                  }}
+                  keyboardType="numeric"
+                  placeholder="1 (Monday)"
+                  maxLength={1}
+                />
+              </>
+            )}
+
+            {scheduleData.scheduleType === 'monthly' && (
+              <>
+                <Text style={styles.modalLabel}>Day of Month (1-31)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={scheduleData.payoutDay?.toString() || ''}
+                  onChangeText={(text) => {
+                    const num = text.replace(/[^0-9]/g, '');
+                    setScheduleData({
+                      ...scheduleData,
+                      payoutDay: num ? parseInt(num) : null,
+                    });
+                  }}
+                  keyboardType="numeric"
+                  placeholder="15"
+                  maxLength={2}
+                />
+              </>
+            )}
+
+            {scheduleData.scheduleType === 'custom' && (
+              <>
+                <Text style={styles.modalLabel}>Payout Date</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={scheduleData.payoutDate || ''}
+                  onChangeText={(text) => setScheduleData({ ...scheduleData, payoutDate: text })}
+                  placeholder="YYYY-MM-DD"
+                />
+                <Text style={styles.helperText}>
+                  Format: YYYY-MM-DD (e.g., 2024-12-25)
+                </Text>
+              </>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setScheduleModal(false);
+                  setScheduleData({ scheduleType: null, payoutDay: null, payoutDate: null });
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveSchedule}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -550,6 +800,134 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     textAlign: 'center',
     marginTop: 40,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  editButton: {
+    fontSize: 16,
+    color: '#4F46E5',
+    fontWeight: '600',
+  },
+  noScheduleContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  noScheduleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  noScheduleSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  nextPayoutDate: {
+    color: '#10B981',
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  modalDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  modalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  scheduleTypeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  scheduleTypeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  scheduleTypeButtonActive: {
+    backgroundColor: '#4F46E5',
+    borderColor: '#4F46E5',
+  },
+  scheduleTypeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  scheduleTypeTextActive: {
+    color: '#FFFFFF',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F3F4F6',
+  },
+  cancelButtonText: {
+    color: '#374151',
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#4F46E5',
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
 

@@ -53,9 +53,11 @@ export const authApi = {
         headers: { 'X-Skip-Auth': 'true' }
       });
       
-      // Store token in AsyncStorage if registration was successful
+      // Store token in AsyncStorage and update API client cache
       if (response.data.token) {
         await AsyncStorage.setItem('authToken', response.data.token);
+        const { updateCachedToken } = await import('./api');
+        await updateCachedToken(response.data.token);
       }
       
       return {
@@ -80,8 +82,10 @@ export const authApi = {
       });
       
       if (response.data.status === 'success') {
-        // Store token in AsyncStorage
+        // Store token in AsyncStorage and update API client cache
         await AsyncStorage.setItem('authToken', response.data.token);
+        const { updateCachedToken } = await import('./api');
+        await updateCachedToken(response.data.token);
         
         // Extract all user fields from backend response
         const backendUser = response.data.data.user;

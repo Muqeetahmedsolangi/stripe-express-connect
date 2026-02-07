@@ -1,5 +1,12 @@
 import { api } from './api';
 
+export interface PayoutSchedule {
+  type: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+  day: number | null;
+  date: string | null;
+  nextPayoutDate: string | null;
+}
+
 export interface Seller {
   id: number;
   email: string;
@@ -27,6 +34,7 @@ export interface Seller {
     type: string;
     email: string;
   };
+  payoutSchedule?: PayoutSchedule;
 }
 
 export interface SellerDetails extends Seller {
@@ -199,6 +207,28 @@ export const adminApi = {
       return {
         status: 'fail',
         message: error.response?.data?.message || 'Failed to release ready payments'
+      };
+    }
+  },
+
+  // Update seller payout schedule
+  updateSellerPayoutSchedule: async (sellerId: number, data: {
+    scheduleType?: 'daily' | 'weekly' | 'monthly' | 'custom' | null;
+    payoutDay?: number | null;
+    payoutDate?: string | null;
+  }): Promise<{ status: 'success' | 'fail'; message?: string; data?: any }> => {
+    try {
+      const response = await api.patch(`/admin/sellers/${sellerId}/payout-schedule`, data);
+      return {
+        status: 'success',
+        message: response.data.message,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      console.error('Update payout schedule error:', error);
+      return {
+        status: 'fail',
+        message: error.response?.data?.message || 'Failed to update payout schedule'
       };
     }
   },

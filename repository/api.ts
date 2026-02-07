@@ -8,7 +8,7 @@ import {
   refreshTokenSuccess,
 } from "../store/slices/authSlice";
 
-const BACKEND_API_URL = "https://agrees-mining-examinations-newspapers.trycloudflare.com/api";
+const BACKEND_API_URL = "https://dresses-software-programming-camps.trycloudflare.com/api";
 
 const api = axios.create({
   baseURL: BACKEND_API_URL,
@@ -22,30 +22,71 @@ const api = axios.create({
 let isRefreshing = false;
 let currentToken: string | null = null;
 
-export const clearCachedToken = () => {
+export const clearCachedToken = async () => {
   currentToken = null;
+  if (Platform.OS !== "web") {
+    await AsyncStorage.removeItem("authToken");
+  } else {
+    localStorage.removeItem("authToken");
+  }
 };
 
-export const updateCachedToken = (newToken: string) => {
+export const updateCachedToken = async (newToken: string) => {
   currentToken = newToken;
+  if (Platform.OS !== "web") {
+    await AsyncStorage.setItem("authToken", newToken);
+  } else {
+    localStorage.setItem("authToken", newToken);
+  }
+};
+
+// Helper to get token from storage
+export const getTokenFromStorage = async (): Promise<string | null> => {
+  try {
+    if (Platform.OS !== "web") {
+      return await AsyncStorage.getItem("authToken");
+    } else {
+      return localStorage.getItem("authToken");
+    }
+  } catch (error) {
+    console.error("Error getting token from storage:", error);
+    return null;
+  }
 };
 
 const getAuthData = async () => {
   try {
+    // First try to get token from AsyncStorage directly (fallback)
+    let tokenFromStorage: string | null = null;
+    if (Platform.OS !== "web") {
+      tokenFromStorage = await AsyncStorage.getItem("authToken");
+    } else {
+      tokenFromStorage = localStorage.getItem("authToken");
+    }
+
+    // Try to get from Redux persisted state
+    let userFromState = null;
     if (Platform.OS !== "web") {
       const persistedState = await AsyncStorage.getItem("persist:root");
       if (persistedState) {
         const parsedState = JSON.parse(persistedState);
         const authData = JSON.parse(parsedState.auth || "{}");
-        return authData.user || null;
+        userFromState = authData.user || null;
       }
     } else {
       const persistedState = localStorage.getItem("persist:root");
       if (persistedState) {
         const parsedState = JSON.parse(persistedState);
         const authData = JSON.parse(parsedState.auth || "{}");
-        return authData.user || null;
+        userFromState = authData.user || null;
       }
+    }
+
+    // Return user from state if available, otherwise create object with token from storage
+    if (userFromState) {
+      return userFromState;
+    } else if (tokenFromStorage) {
+      return { token: tokenFromStorage };
     }
   } catch (error) {
     console.error("Error getting auth data:", error);
@@ -72,12 +113,30 @@ api.interceptors.request.use(
         if (!token) {
           const authData = await getAuthData();
           token = authData?.token;
-          currentToken = token;
+          
+          // If still no token, try AsyncStorage directly as last resort
+          if (!token && Platform.OS !== "web") {
+            token = await AsyncStorage.getItem("authToken");
+          } else if (!token) {
+            token = localStorage.getItem("authToken");
+          }
+          
+          if (token) {
+            currentToken = token;
+          }
         }
 
         if (token) {
           config.headers = config.headers || {};
           config.headers.Authorization = `Bearer ${token}`;
+          
+          if (__DEV__) {
+            console.log(`[API] Adding token to request: ${token.substring(0, 20)}...`);
+          }
+        } else {
+          if (__DEV__) {
+            console.warn(`[API] No token found for request: ${config.method?.toUpperCase()} ${config.url}`);
+          }
         }
       } else {
         if (config.headers?.Authorization)

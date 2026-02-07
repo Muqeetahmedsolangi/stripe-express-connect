@@ -44,7 +44,7 @@ export default function LogoutButton() {
               dispatch(clearProductsError());
 
               // 3. Clear API client cached token
-              clearCachedToken();
+              await clearCachedToken();
 
               // 4. Clear persistent storage
               if (Platform.OS !== 'web') {
